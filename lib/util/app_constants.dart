@@ -2,14 +2,14 @@ import 'package:sixam_mart_store/features/language/domain/models/language_model.
 import 'package:sixam_mart_store/util/images.dart';
 
 class AppConstants {
-  static const String appName = '6amMart Vendor';
+  static const String appName = 'MyTijaara Vendor';
   static const double appVersion = 4.0; ///Flutter SDK: 3.44.2
 
-  static const String fontFamily = 'Roboto';
+  static const String fontFamily = 'DMSans';
   static const double limitOfPickedVideoSizeInMB = 50;
   static const double maxSizeOfASingleFile = 10;
 
-  static const String baseUrl = 'https://6ammart-admin.6amtech.com';
+  static const String baseUrl = 'https://dashboard.mytijaara.com';
 
   static const String configUri = '/api/v1/config';
   static const String loginUri = '/api/v1/auth/vendor/login';

@@ -3,7 +3,7 @@ import 'package:sixam_mart_store/util/images.dart';
 
 class AppConstants {
   static const String appName = 'MyTijaara Vendor';
-  static const double appVersion = 4.0; ///Flutter SDK: 3.44.2
+  static const double appVersion = 4.2; ///Flutter SDK: 3.44.2
 
   static const String fontFamily = 'DMSans';
   static const double limitOfPickedVideoSizeInMB = 50;

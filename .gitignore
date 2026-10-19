@@ -57,3 +57,6 @@ key.properties
 # Build artifacts
 *.apk
 *.aab
+
+# GEMINI-MYTJ: Local investigation/change logs are not shipped with the app.
+docs/GEMINI-MYTJ-CHANGELOG.md

@@ -20,8 +20,18 @@ class AuthService implements AuthServiceInterface {
   }
 
   @override
-  Future<Response> registerRestaurant(Map<String, String> data, XFile? logo, XFile? cover, List<MultipartDocument> tinFiles) async {
-    return await authRepositoryInterface.registerRestaurant(data, logo, cover, tinFiles);
+  Future<Response> registerRestaurant(
+    Map<String, String> data,
+    XFile? logo,
+    XFile? cover,
+    List<MultipartDocument> tinFiles,
+  ) async {
+    return await authRepositoryInterface.registerRestaurant(
+      data,
+      logo,
+      cover,
+      tinFiles,
+    );
   }
 
   @override
@@ -30,7 +40,11 @@ class AuthService implements AuthServiceInterface {
   }
 
   @override
-  Future<bool> saveUserToken(String token, String zoneTopic, String type) async {
+  Future<bool> saveUserToken(
+    String token,
+    String zoneTopic,
+    String type,
+  ) async {
     return await authRepositoryInterface.saveUserToken(token, zoneTopic, type);
   }
 
@@ -50,8 +64,16 @@ class AuthService implements AuthServiceInterface {
   }
 
   @override
-  Future<void> saveUserNumberAndPassword(String number, String password, String type) async {
-    return await authRepositoryInterface.saveUserNumberAndPassword(number, password, type);
+  Future<void> saveUserNumberAndPassword(
+    String number,
+    String password,
+    String type,
+  ) async {
+    return await authRepositoryInterface.saveUserNumberAndPassword(
+      number,
+      password,
+      type,
+    );
   }
 
   @override
@@ -75,7 +97,7 @@ class AuthService implements AuthServiceInterface {
   }
 
   @override
-  Future<void> setNotificationActive(bool isActive) async{
+  Future<void> setNotificationActive(bool isActive) async {
     return await authRepositoryInterface.setNotificationActive(isActive);
   }
 
@@ -103,29 +125,49 @@ class AuthService implements AuthServiceInterface {
   Future<ResponseModel?> manageLogin(Response response, String type) async {
     ResponseModel? responseModel;
     if (response.statusCode == 200) {
-
       String? moduleType = response.body['module_type'];
       setModuleType(moduleType ?? '');
 
-      if(response.body['subscribed'] != null){
+      if (response.body['subscribed'] != null) {
         int? storeId = response.body['subscribed']['store_id'];
         int? packageId = response.body['subscribed']['package_id'];
 
-        if(packageId == null) {
-
-          saveUserToken(response.body['subscribed']['token'], response.body['subscribed']['zone_wise_topic'], type);
+        if (packageId == null) {
+          // GEMINI-MYTJ: Persist the token before any authenticated startup request.
+          await saveUserToken(
+            response.body['subscribed']['token'],
+            response.body['subscribed']['zone_wise_topic'],
+            type,
+          );
           await updateToken();
-          moduleType == 'rental' ? await Get.find<TaxiProfileController>().getProfile() : await Get.find<ProfileController>().getProfile();
+          moduleType == 'rental'
+              ? await Get.find<TaxiProfileController>().getProfile()
+              : await Get.find<ProfileController>().getProfile();
 
-          Get.toNamed(RouteHelper.getMySubscriptionRoute(fromNotification: true));
+          Get.toNamed(
+            RouteHelper.getMySubscriptionRoute(fromNotification: true),
+          );
         } else {
-          Get.to(()=> SubscriptionPaymentScreen(storeId: storeId!, packageId: packageId));
-          responseModel = ResponseModel(false, 'please_select_payment_method'.tr);
+          Get.to(
+            () => SubscriptionPaymentScreen(
+              storeId: storeId!,
+              packageId: packageId,
+            ),
+          );
+          responseModel = ResponseModel(
+            false,
+            'please_select_payment_method'.tr,
+          );
         }
-      }else{
-        saveUserToken(response.body['token'], response.body['zone_wise_topic'], type);
+      } else {
+        // GEMINI-MYTJ: Do not let login finish before SharedPreferences has the token.
+        await saveUserToken(
+          response.body['token'],
+          response.body['zone_wise_topic'],
+          type,
+        );
         await updateToken();
-        moduleType == 'rental' ? Get.find<TaxiProfileController>().getProfile() : Get.find<ProfileController>().getProfile();
+        // GEMINI-MYTJ: The sign-in coordinator owns profile loading and awaits it before routing.
         responseModel = ResponseModel(true, 'successful');
       }
     } else {
@@ -148,5 +190,4 @@ class AuthService implements AuthServiceInterface {
   void setModuleType(String type) {
     authRepositoryInterface.setModuleType(type);
   }
-
 }

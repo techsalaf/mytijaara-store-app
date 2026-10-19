@@ -25,26 +25,38 @@ class SplashScreen extends StatefulWidget {
 }
 
 class SplashScreenState extends State<SplashScreen> {
-
   final GlobalKey<ScaffoldState> _globalKey = GlobalKey();
   StreamSubscription<List<ConnectivityResult>>? _onConnectivityChanged;
+  bool _startupInProgress = false;
+  String? _startupError;
 
   @override
   void initState() {
     super.initState();
 
     bool firstTime = true;
-    _onConnectivityChanged = Connectivity().onConnectivityChanged.listen((List<ConnectivityResult> result) {
-      bool isConnected = result.contains(ConnectivityResult.wifi) || result.contains(ConnectivityResult.mobile);
+    _onConnectivityChanged = Connectivity().onConnectivityChanged.listen((
+      List<ConnectivityResult> result,
+    ) {
+      bool isConnected =
+          result.contains(ConnectivityResult.wifi) ||
+          result.contains(ConnectivityResult.mobile);
 
-      if(!firstTime) {
-        isConnected ? ScaffoldMessenger.of(Get.context!).hideCurrentSnackBar() : const SizedBox();
-        ScaffoldMessenger.of(Get.context!).showSnackBar(SnackBar(
-          backgroundColor: isConnected ? Colors.green : Colors.red,
-          duration: Duration(seconds: isConnected ? 3 : 6000),
-          content: Text(isConnected ? 'connected'.tr : 'no_connection'.tr, textAlign: TextAlign.center),
-        ));
-        if(isConnected) {
+      if (!firstTime) {
+        isConnected
+            ? ScaffoldMessenger.of(Get.context!).hideCurrentSnackBar()
+            : const SizedBox();
+        ScaffoldMessenger.of(Get.context!).showSnackBar(
+          SnackBar(
+            backgroundColor: isConnected ? Colors.green : Colors.red,
+            duration: Duration(seconds: isConnected ? 3 : 6000),
+            content: Text(
+              isConnected ? 'connected'.tr : 'no_connection'.tr,
+              textAlign: TextAlign.center,
+            ),
+          ),
+        );
+        if (isConnected) {
           _route();
         }
       }
@@ -54,7 +66,6 @@ class SplashScreenState extends State<SplashScreen> {
 
     Get.find<SplashController>().initSharedData();
     _route();
-
   }
 
   @override
@@ -64,28 +75,56 @@ class SplashScreenState extends State<SplashScreen> {
     _onConnectivityChanged?.cancel();
   }
 
-  void _route() {
-    Get.find<SplashController>().getConfigData().then((isSuccess) async {
-      if (isSuccess) {
-        Timer(const Duration(seconds: 1), () async {
-          double? minimumVersion = _getMinimumVersion();
-          bool isMaintenanceMode = Get.find<SplashController>().configModel!.maintenanceMode!;
-          bool needsUpdate = AppConstants.appVersion < minimumVersion!;
-          bool inMaintenanceForApp = isMaintenanceMode && Get.find<SplashController>().configModel!.maintenanceModeData!.maintenanceSystemSetup!.contains('vendor_app');
+  Future<void> _route() async {
+    if (_startupInProgress) return;
+    setState(() {
+      _startupInProgress = true;
+      _startupError = null;
+    });
+    try {
+      // GEMINI-MYTJ: Keep routing in this startup coordinator so home cannot open before profile loading.
+      final bool isSuccess = await Get.find<SplashController>().getConfigData(
+        closeRoute: true,
+      );
+      if (!isSuccess) {
+        throw StateError('Startup configuration failed');
+      }
+      await Future<void>.delayed(const Duration(seconds: 1));
+      double? minimumVersion = _getMinimumVersion();
+      bool isMaintenanceMode =
+          Get.find<SplashController>().configModel!.maintenanceMode!;
+      bool needsUpdate = AppConstants.appVersion < minimumVersion!;
+      bool inMaintenanceForApp =
+          isMaintenanceMode &&
+          Get.find<SplashController>()
+              .configModel!
+              .maintenanceModeData!
+              .maintenanceSystemSetup!
+              .contains('vendor_app');
 
-          if (needsUpdate || inMaintenanceForApp) {
-            Get.offNamed(RouteHelper.getUpdateRoute(needsUpdate));
-            return;
-          }
+      if (needsUpdate || inMaintenanceForApp) {
+        Get.offNamed(RouteHelper.getUpdateRoute(needsUpdate));
+        return;
+      }
 
-          if(widget.body != null) {
-            await _handleNotificationRouting(widget.body);
-          }else{
-            await _handleDefaultRouting();
-          }
+      if (widget.body != null) {
+        await _handleNotificationRouting(widget.body);
+      } else {
+        await _handleDefaultRouting();
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _startupError = 'try_again'.tr;
         });
       }
-    });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _startupInProgress = false;
+        });
+      }
+    }
   }
 
   double? _getMinimumVersion() {
@@ -97,41 +136,83 @@ class SplashScreenState extends State<SplashScreen> {
     return 0;
   }
 
-  Future<void> _handleNotificationRouting(NotificationBodyModel? notificationBody) async {
+  Future<void> _handleNotificationRouting(
+    NotificationBodyModel? notificationBody,
+  ) async {
     final notificationType = notificationBody?.notificationType;
-    
+
     final Map<NotificationType, Function> notificationActions = {
       NotificationType.order: () {
-        if(Get.find<AuthController>().getModuleType() == 'rental'){
-          Get.to(()=> TripDetailsScreen(tripId: notificationBody!.orderId!, fromNotification: true));
-        }else{
-          Get.toNamed(RouteHelper.getOrderDetailsRoute(notificationBody?.orderId, fromNotification: true));
+        if (Get.find<AuthController>().getModuleType() == 'rental') {
+          Get.to(
+            () => TripDetailsScreen(
+              tripId: notificationBody!.orderId!,
+              fromNotification: true,
+            ),
+          );
+        } else {
+          Get.toNamed(
+            RouteHelper.getOrderDetailsRoute(
+              notificationBody?.orderId,
+              fromNotification: true,
+            ),
+          );
         }
       },
-      NotificationType.advertisement: () => Get.toNamed(RouteHelper.getAdvertisementDetailsScreen(advertisementId: notificationBody?.advertisementId, fromNotification: true)),
-      NotificationType.block: () => Get.offAllNamed(RouteHelper.getSignInRoute()),
-      NotificationType.unblock: () => Get.offAllNamed(RouteHelper.getSignInRoute()),
-      NotificationType.withdraw: () => Get.to(const DashboardScreen(pageIndex: 3)),
-      NotificationType.campaign: () => Get.toNamed(RouteHelper.getCampaignDetailsRoute(id: notificationBody?.campaignId, fromNotification: true)),
+      NotificationType.advertisement: () => Get.toNamed(
+        RouteHelper.getAdvertisementDetailsScreen(
+          advertisementId: notificationBody?.advertisementId,
+          fromNotification: true,
+        ),
+      ),
+      NotificationType.block: () =>
+          Get.offAllNamed(RouteHelper.getSignInRoute()),
+      NotificationType.unblock: () =>
+          Get.offAllNamed(RouteHelper.getSignInRoute()),
+      NotificationType.withdraw: () =>
+          Get.to(const DashboardScreen(pageIndex: 3)),
+      NotificationType.campaign: () => Get.toNamed(
+        RouteHelper.getCampaignDetailsRoute(
+          id: notificationBody?.campaignId,
+          fromNotification: true,
+        ),
+      ),
       NotificationType.message: () {
-        if(Get.find<AuthController>().getModuleType() == 'rental'){
-          Get.to(()=> TaxiChatScreen(notificationBody: notificationBody, conversationId: notificationBody?.conversationId, fromNotification: true));
-        }else{
-          Get.toNamed(RouteHelper.getChatRoute(notificationBody: notificationBody, conversationId: notificationBody?.conversationId, fromNotification: true));
+        if (Get.find<AuthController>().getModuleType() == 'rental') {
+          Get.to(
+            () => TaxiChatScreen(
+              notificationBody: notificationBody,
+              conversationId: notificationBody?.conversationId,
+              fromNotification: true,
+            ),
+          );
+        } else {
+          Get.toNamed(
+            RouteHelper.getChatRoute(
+              notificationBody: notificationBody,
+              conversationId: notificationBody?.conversationId,
+              fromNotification: true,
+            ),
+          );
         }
       },
-      NotificationType.subscription: () async{
+      NotificationType.subscription: () async {
         if (Get.find<SplashController>().configModel == null) {
           await Get.find<SplashController>().getConfigData(closeRoute: true);
         }
         if (Get.find<ProfileController>().profileModel == null) {
           await Get.find<ProfileController>().getProfile();
         }
-        return Get.toNamed(RouteHelper.getMySubscriptionRoute(fromNotification: true));
+        return Get.toNamed(
+          RouteHelper.getMySubscriptionRoute(fromNotification: true),
+        );
       },
-      NotificationType.product_approve: () => Get.toNamed(RouteHelper.getNotificationRoute(fromNotification: true)),
-      NotificationType.product_rejected: () => Get.toNamed(RouteHelper.getPendingItemRoute(fromNotification: true)),
-      NotificationType.general: () => Get.toNamed(RouteHelper.getNotificationRoute(fromNotification: true)),
+      NotificationType.product_approve: () =>
+          Get.toNamed(RouteHelper.getNotificationRoute(fromNotification: true)),
+      NotificationType.product_rejected: () =>
+          Get.toNamed(RouteHelper.getPendingItemRoute(fromNotification: true)),
+      NotificationType.general: () =>
+          Get.toNamed(RouteHelper.getNotificationRoute(fromNotification: true)),
     };
 
     notificationActions[notificationType]?.call();
@@ -140,13 +221,24 @@ class SplashScreenState extends State<SplashScreen> {
   Future<void> _handleDefaultRouting() async {
     if (Get.find<AuthController>().isLoggedIn()) {
       await Get.find<AuthController>().updateToken();
-      Get.find<AuthController>().getModuleType() == 'rental' ? await Get.find<TaxiProfileController>().getProfile() : await Get.find<ProfileController>().getProfile();
+      if (Get.find<AuthController>().getModuleType() == 'rental') {
+        await Get.find<TaxiProfileController>().getProfile();
+      } else {
+        await Get.find<ProfileController>().getProfile();
+        final profile = Get.find<ProfileController>().profileModel;
+        if (profile == null ||
+            profile.stores == null ||
+            profile.stores!.isEmpty ||
+            profile.stores!.first.module == null) {
+          throw StateError('Vendor profile is incomplete');
+        }
+      }
       Get.offNamed(RouteHelper.getInitialRoute());
     } else {
       final bool showIntro = Get.find<SplashController>().showIntro();
-      if(AppConstants.languages.length > 1 && showIntro) {
+      if (AppConstants.languages.length > 1 && showIntro) {
         Get.offNamed(RouteHelper.getLanguageRoute('splash'));
-      }else {
+      } else {
         Get.offNamed(RouteHelper.getSignInRoute());
       }
     }
@@ -159,11 +251,35 @@ class SplashScreenState extends State<SplashScreen> {
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(Dimensions.paddingSizeLarge),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Image.asset(Images.logo, width: 200),
-            const SizedBox(height: Dimensions.paddingSizeSmall),
-            Text('suffix_name'.tr, style: robotoMedium, textAlign: TextAlign.center),
-          ]),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Image.asset(Images.logo, width: 200),
+              const SizedBox(height: Dimensions.paddingSizeSmall),
+              Text(
+                'suffix_name'.tr,
+                style: robotoMedium,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: Dimensions.paddingSizeLarge),
+              if (_startupError == null) ...[
+                const SizedBox(width: 180, child: LinearProgressIndicator()),
+                const SizedBox(height: Dimensions.paddingSizeSmall),
+                Text('loading'.tr, style: robotoRegular),
+              ] else ...[
+                Text(
+                  _startupError!,
+                  style: robotoRegular,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: Dimensions.paddingSizeSmall),
+                ElevatedButton(
+                  onPressed: _startupInProgress ? null : _route,
+                  child: Text('try_again'.tr),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );

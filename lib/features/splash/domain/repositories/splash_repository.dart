@@ -13,7 +13,9 @@ class SplashRepository implements SplashRepositoryInterface {
 
   @override
   Future<Response> getConfigData() async {
-    return await apiClient.getData(AppConstants.configUri);
+    // GEMINI-MYTJ: Let the splash coordinator own config failures so retry is
+    // not intercepted by ApiChecker before the error state can be rendered.
+    return await apiClient.getData(AppConstants.configUri, handleError: false);
   }
 
   @override

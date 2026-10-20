@@ -64,8 +64,9 @@ class SplashScreenState extends State<SplashScreen> {
       firstTime = false;
     });
 
-    Get.find<SplashController>().initSharedData();
-    _route();
+    // GEMINI-MYTJ: Complete preference initialization before the first API
+    // attempt; this also makes a retry use the same initialized headers.
+    Get.find<SplashController>().initSharedData().whenComplete(_route);
   }
 
   @override
@@ -112,7 +113,8 @@ class SplashScreenState extends State<SplashScreen> {
       } else {
         await _handleDefaultRouting();
       }
-    } catch (_) {
+    } catch (error, stackTrace) {
+      debugPrint('Splash startup failed: $error\n$stackTrace');
       if (mounted) {
         setState(() {
           _startupError = 'try_again'.tr;
